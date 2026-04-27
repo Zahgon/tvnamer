@@ -53,13 +53,13 @@ class FileCacheDict(MutableMapping):
         raise RuntimeError("Removing items from test-cache not supported")
 
     def __len__(self):
-        raise NotImplementedError()
+        pass
 
     def __iter__(self):
-        raise NotImplementedError()
+        pass
 
     def clear(self):
-        raise NotImplementedError()
+        pass
 
     def __str__(self):
         return str(dict(self.items()))
@@ -76,13 +76,4 @@ requests_cache.backends.registry['tvnamer_file_cache'] = FileCache
 
 
 def get_test_cache_session():
-    here = os.path.dirname(os.path.abspath(__file__))
-    sess = requests_cache.CachedSession(
-        backend="tvnamer_file_cache",
-        fc_base_dir=os.path.join(here, "..", "tests", "httpcache"),
-        include_get_headers=True,
-        allowable_codes=(200, 404),
-    )
-    import tvdb_api
-    sess.cache.create_key = types.MethodType(tvdb_api.create_key, sess.cache)
-    return sess
+    pass

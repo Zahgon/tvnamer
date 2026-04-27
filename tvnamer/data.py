@@ -34,8 +34,7 @@ def _replace_output_series_name(seriesname):
 
     This affects the output filename.
     """
-
-    return Config['output_series_replacements'].get(seriesname, seriesname)
+    pass
 
 
 
@@ -43,25 +42,13 @@ def _apply_replacements_output(cfile):
     # type: (str) -> str
     """Applies custom output filename replacements, wraps _apply_replacements
     """
-    return _apply_replacements(cfile, Config['output_filename_replacements'])
+    pass
 
 
 def transform_filename(fname):
     # type: (str) -> str
 
-    if Config['titlecase_filename']:
-        from tvnamer._titlecase import titlecase
-        fname = titlecase(fname)
-
-    if Config['lowercase_filename']:
-        fname = fname.lower()
-
-    # Replace accented characters with ASCII equivalent
-    if Config['normalize_unicode_filenames']:
-        import unicodedata
-        fname = unicodedata.normalize('NFKD', fname).encode('ascii', 'ignore').decode("utf-8")
-
-    return fname
+    pass
 
 
 def format_episode_name(names, join_with, multiep_format):
@@ -77,59 +64,7 @@ def format_episode_name(names, join_with, multiep_format):
     If two different episode names are found, such as "The first", and
     "Something else" it will return "The first, Something else"
     """
-
-    if len(names) == 1:
-        # Shortcut in simple case
-        return names[0]
-
-
-    all_names = [] # type: List[str]
-    all_numbers = [] # type: List[Optional[int]]
-
-    for curname in names:
-        match = re.match(r"(.*) \(([0-9]+)\)$", curname)
-        if match is None:
-            all_names.append(curname)
-            all_numbers.append(None)
-        else:
-            name, number = match.group(1), match.group(2)
-            assert name is not None
-            assert number is not None
-            all_names.append(name)
-            all_numbers.append(int(number))
-
-    if all_numbers.count(None) > 1:
-        # If more than one episode missed a number, simple join
-        # E.g ["Blah", "Blah (2)"] is fine, but not ["Blah", "Blah", "Blah (3)"]
-        print("too much none")
-        return join_with.join(names)
-
-    if len(set(all_names)) != 1:
-        # If for differing episodes names, simple join
-        # E.g "Yep (1)" "Strange (2)" shouldn't be joined into "Yep (1-2)"
-        print("non unqiue names")
-        return join_with.join(names)
-
-    # First missing number becomes 1
-    noneless_numbers = [(n if n is not None else 1) for n in all_numbers]
-
-    if len(set(noneless_numbers)) != len(noneless_numbers):
-        # Duplicate numbers - strange so perform simple join
-        print("Dup numbers")
-        return join_with.join(names)
-
-    if (max(noneless_numbers) - min(noneless_numbers)) != len(noneless_numbers) -  1:
-        # If missing numbers in sequence, simple join
-        # E.g ["Blah (1)", "Blah (4)"] should not become "Blah (1-4)"
-        print("Non consec")
-        return join_with.join(names)
-
-
-    return multiep_format % {
-        'epname': name,
-        'episodemin': min(noneless_numbers),
-        'episodemax': max(noneless_numbers),
-    }
+    pass
 
 
 class BaseInfo(metaclass=ABCMeta):
@@ -160,42 +95,37 @@ class BaseInfo(metaclass=ABCMeta):
 
     def fullpath_get(self):
         # type: () -> Optional[str]
-        return self._fullpath
+        pass
 
     def fullpath_set(self, value):
         # type: (Optional[str]) -> None
-        self._fullpath = value
-        if value is None:
-            self.filename, self.extension = None, None
-        else:
-            self.filepath, self.filename = os.path.split(value)
-            self.filename, self.extension = split_extension(self.filename)
+        pass
 
     fullpath = property(fullpath_get, fullpath_set)
 
     @property
     def fullfilename(self):
         # type: () -> str
-        return "%s%s" % (self.filename, self.extension)
+        pass
 
     @abstractmethod
     def getepdata(self):
         # type: () -> Dict[str, Optional[str]]
-        raise NotImplemented # pragma: nocover
+        pass
 
     @abstractmethod
     def number_string(self):
         # type: () -> str
         """Used in UI
         """
-        raise NotImplemented # pragma: nocover
+        pass
 
     @abstractmethod
     def sortable_info(self):
         # type: () -> Any
         """Returns a tuple of sortable information
         """
-        raise NotImplemented # pragma: nocover
+        pass
 
     def populate_from_tvdb(self, tvdb_instance, force_name=None, series_id=None):
         # mypy: ignore # type: (tvdb_api.Tvdb, Optional[Any], Optional[Any]) -> None
@@ -206,137 +136,18 @@ class BaseInfo(metaclass=ABCMeta):
         If the site is unreachable, it will warn the user. If the user aborts
         it will catch tvdb_api's user abort error and raise tvnamer's
         """
-
-        # FIXME: MOve this into each subclass - too much hasattr/isinstance
-        try:
-            if series_id is None:
-                show = tvdb_instance[force_name or self.seriesname]
-            else:
-                series_id = int(series_id)
-                tvdb_instance._getShowData(series_id, Config['language'])
-                show = tvdb_instance[series_id]
-        except tvdb_api.tvdb_error as errormsg:
-            raise DataRetrievalError("Error with www.thetvdb.com: %s" % errormsg)
-        except tvdb_api.tvdb_shownotfound:
-            # No such series found.
-            raise ShowNotFound("Show %s not found on www.thetvdb.com" % self.seriesname)
-        except tvdb_api.tvdb_userabort as error:
-            raise UserAbort("%s" % error)
-        else:
-            # Series was found, use corrected series name
-            self.seriesname = _replace_output_series_name(show['seriesName'])
-
-        if isinstance(self, DatedEpisodeInfo):
-            # Date-based episode
-            epnames = []
-            for cepno in self.episodenumbers:
-                try:
-                    sr = show.aired_on(cepno)
-                    if len(sr) > 1:
-                        # filter out specials if multiple episodes aired on the day
-                        sr = [s for s in sr if s['seasonnumber'] != '0']
-
-                    if len(sr) > 1:
-                        raise EpisodeNotFound(
-                            "Ambigious air date %s, there were %s episodes on that day"
-                            % (cepno, len(sr))
-                        )
-                    epnames.append(sr[0]['episodeName'])
-                except tvdb_api.tvdb_episodenotfound:
-                    raise EpisodeNotFound(
-                        "Episode that aired on %s could not be found" % (cepno)
-                    )
-            self.episodename = epnames # Optional[List[str]]
-            return
-
-        if not hasattr(self, "seasonnumber") or self.seasonnumber is None:
-            # Series without concept of seasons have all episodes in season 1
-            seasonnumber = 1
-        else:
-            seasonnumber = self.seasonnumber
-
-        epnames = []
-        for cepno in self.episodenumbers:
-            try:
-                episodeinfo = show[seasonnumber][cepno]
-
-            except tvdb_api.tvdb_seasonnotfound:
-                raise SeasonNotFound(
-                    "Season %s of show %s could not be found"
-                    % (seasonnumber, self.seriesname)
-                )
-
-            except tvdb_api.tvdb_episodenotfound:
-                # Try to search by absolute number
-                sr = show.search(cepno, "absoluteNumber")
-                if len(sr) > 1:
-                    # For multiple results try and make sure there is a direct match
-                    unsure = True
-                    for e in sr:
-                        if int(e['absoluteNumber']) == cepno:
-                            epnames.append(e['episodeName'])
-                            unsure = False
-                    # If unsure error out
-                    if unsure:
-                        raise EpisodeNotFound(
-                            "No episode actually matches %s, found %s results instead"
-                            % (cepno, len(sr))
-                        )
-                elif len(sr) == 1:
-                    epnames.append(sr[0]['episodeName'])
-                else:
-                    raise EpisodeNotFound(
-                        "Episode %s of show %s, season %s could not be found (also tried searching by absolute episode number)"
-                        % (cepno, self.seriesname, seasonnumber)
-                    )
-
-            except tvdb_api.tvdb_attributenotfound:
-                raise EpisodeNameNotFound("Could not find episode name for %s" % cepno)
-            else:
-                epnames.append(episodeinfo['episodeName'])
-
-        self.episodename = epnames
+        pass
 
     def format_name(self, epdata):
         # type: (Dict[str, Optional[str]]) -> str
-        raise NotImplemented
+        pass
 
     def generate_filename(self, preview_orig_filename=False):
         # type: (bool) -> str
 
         # FIXME: Move this into each subclass - too much hasattr/isinstance
 
-        original_epdata = self.getepdata()
-
-        # Add in extra dict keys, without clobbering existing values from getepdata()
-        epdata = {} # type: Dict[str, Optional[str]]
-        epdata.update(self.extra.copy())
-        epdata.update(original_epdata)
-
-        if self.episodename is None:
-            fname = self.format_name(epdata)
-        else:
-            epdata['episodename'] = format_episode_name(
-                self.episodename,
-                join_with=Config['multiep_join_name_with'],
-                multiep_format=Config['multiep_format'],
-            )
-            fname = self.format_name(epdata)
-
-        fname = transform_filename(fname)
-        if preview_orig_filename:
-            # Return filename without custom replacements or filesystem-validness
-            return fname
-
-        if len(Config['output_filename_replacements']) > 0:
-            fname = _apply_replacements_output(fname)
-
-        return make_valid_filename(
-            fname,
-            windows_safe=Config['windows_safe_filenames'],
-            custom_blacklist=Config['custom_filename_character_blacklist'],
-            replace_with=Config['replace_invalid_characters_with'],
-        )
+        pass
 
 
 class EpisodeInfo(BaseInfo):
@@ -363,16 +174,13 @@ class EpisodeInfo(BaseInfo):
         # type: () -> Tuple[str, int, List[int]]
         """Returns a tuple of sortable information
         """
-        return ("%s" % self.seriesname, self.seasonnumber, self.episodenumbers)
+        pass
 
     def number_string(self):
         # type: () -> str
         """Used in UI
         """
-        return "season: %s, episode: %s" % (
-            self.seasonnumber,
-            ", ".join([str(x) for x in self.episodenumbers]),
-        )
+        pass
 
     def getepdata(self):
         # type: () -> Dict[str, Optional[str]]
@@ -383,32 +191,11 @@ class EpisodeInfo(BaseInfo):
         episode_single # formatting for a single episode number
         episode_separator # used to join multiple episode numbers
         """
-        # Format episode number into string, or a list
-        epno = format_episode_numbers(self.episodenumbers)
-
-        # Data made available to config'd output file format
-        if self.extension is None:
-            prep_extension = ''
-        else:
-            prep_extension = self.extension
-
-        epdata = {
-            'seriesname': self.seriesname,
-            'seasonno': self.seasonnumber,  # TODO: deprecated attribute, make this warn somehow
-            'seasonnumber': self.seasonnumber,
-            'episode': epno,
-            'episodename': self.episodename,
-            'ext': prep_extension,
-        }
-
-        return epdata
+        pass
 
     def format_name(self, epdata):
         # type: (Dict[str, Optional[str]]) -> str
-        if self.episodename is not None:
-            return Config["filename_with_episode"] % epdata
-        else:
-            return Config["filename_without_episode"] % epdata
+        pass
 
     def __repr__(self):
         # type: () -> str
@@ -436,52 +223,23 @@ class DatedEpisodeInfo(BaseInfo):
         # type: () -> Tuple[str, List[datetime.date]]
         """Returns a tuple of sortable information
         """
-        return ("%s" % (self.seriesname), self.episodenumbers)
+        pass
 
     def number_string(self):
         # type: () -> str
         """Used in UI
         """
-        return "episode: %s" % (", ".join([str(x) for x in self.episodenumbers]))
+        pass
 
     def getepdata(self):
         # type: () -> Dict[str, Optional[str]]
         # Format episode number into string, or a list
 
-        if self.episodename is None:
-            prep_episodename = None # type: Optional[str]
-        if isinstance(self.episodename, list):
-            prep_episodename = format_episode_name(
-                self.episodename,
-                join_with=Config['multiep_join_name_with'],
-                multiep_format=Config['multiep_format'],
-            )
-        else:
-            prep_episodename = self.episodename
-
-        # Data made available to config'd output file format
-        if self.extension is None:
-            prep_extension = ''
-        else:
-            prep_extension = self.extension
-
-        dates = str(self.episodenumbers[0])
-
-        epdata = {
-            'seriesname': self.seriesname,
-            'episode': dates,
-            'episodename': prep_episodename,
-            'ext': prep_extension,
-        }
-
-        return epdata
+        pass
 
     def format_name(self, epdata,):
         # type: (Dict[str, Optional[str]]) -> str
-        if self.episodename is not None:
-            return Config["filename_with_date_and_episode"] % epdata
-        else:
-            return Config["filename_with_date_without_episode"] % epdata
+        pass
 
 
 class NoSeasonEpisodeInfo(BaseInfo):
@@ -507,39 +265,21 @@ class NoSeasonEpisodeInfo(BaseInfo):
         # type: () -> Tuple[str, List[int]]
         """Returns a tuple of sortable information
         """
-        return ("%s" % self.seriesname, self.episodenumbers)
+        pass
 
     def number_string(self):
         # type: () -> str
         """Used in UI
         """
-        return "episode: %s" % (", ".join([str(x) for x in self.episodenumbers]))
+        pass
 
     def getepdata(self):
         # type: () -> Dict[str, Optional[str]]
-        epno = format_episode_numbers(self.episodenumbers)
-
-        # Data made available to config'd output file format
-        if self.extension is None:
-            prep_extension = ''
-        else:
-            prep_extension = self.extension
-
-        epdata = {
-            'seriesname': self.seriesname,
-            'episode': epno,
-            'episodename': self.episodename,
-            'ext': prep_extension,
-        }
-
-        return epdata
+        pass
 
     def format_name(self, epdata):
         # type: (Dict[str, Optional[str]]) -> str
-        if self.episodename is not None:
-            return Config["filename_with_episode_no_season"] % epdata
-        else:
-            return Config["filename_without_episode_no_season"] % epdata
+        pass
 
 
 class AnimeEpisodeInfo(NoSeasonEpisodeInfo):
@@ -551,52 +291,8 @@ class AnimeEpisodeInfo(NoSeasonEpisodeInfo):
 
     def format_name(self, epdata):
         # type: (Dict[str, Optional[str]]) -> str
-        if self.episodename is None:
-            if self.extra.get('crc') is None:
-                fmt = Config["filename_anime_without_episode_without_crc"]
-            else:
-                # Have crc, but no ep name
-                fmt = Config["filename_anime_without_episode"]
-        else:
-            if self.extra.get('crc') is None:
-                fmt = Config["filename_anime_with_episode_without_crc"]
-            else:
-                fmt = Config["filename_anime_with_episode"]
-
-        return fmt % epdata
+        pass
 
     def generate_filename(self, preview_orig_filename=False):
         # type: (bool) -> str
-        orig_epdata = self.getepdata()
-
-        # Add in extra dict keys, without clobbering existing values in epdata
-        epdata = {} # type: Dict[str, Optional[str]]
-        epdata.update(self.extra.copy())
-        epdata.update(orig_epdata)
-
-        if self.episodename is not None:
-            if isinstance(self.episodename, list):
-                epdata['episodename'] = format_episode_name(
-                    self.episodename,
-                    join_with=Config['multiep_join_name_with'],
-                    multiep_format=Config['multiep_format'],
-                )
-
-        fname = self.format_name(epdata)
-
-        # Lowercase/titlecase/etc
-        fname = transform_filename(fname)
-
-        if preview_orig_filename:
-            # Return filename without custom replacements or filesystem-validness
-            return fname
-
-        if len(Config['output_filename_replacements']) > 0:
-            fname = _apply_replacements_output(fname)
-
-        return make_valid_filename(
-            fname,
-            windows_safe=Config['windows_safe_filenames'],
-            custom_blacklist=Config['custom_filename_character_blacklist'],
-            replace_with=Config['replace_invalid_characters_with'],
-        )
+        pass
